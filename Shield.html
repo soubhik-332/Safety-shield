@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Safety Shield</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #ff7e5f, #feb47b); /* Gradient background */
+            color: #333; /* Dark text for contrast */
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.9); /* Semi-transparent white background */
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2); /* Soft shadow */
+            max-width: 400px;
+            width: 100%;
+        }
+        h1 {
+            font-size: 2.5rem;
+            color: #ff7e5f; /* Gradient color for heading */
+            margin-bottom: 10px;
+        }
+        p {
+            font-size: 1.1rem;
+            color: #555; /* Slightly darker text for description */
+            margin-bottom: 20px;
+        }
+        #status, #accidentStatus, #locationStatus {
+            font-size: 1rem;
+            font-weight: bold;
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.8); /* Semi-transparent background */
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+        }
+        #accidentStatus {
+            color: #e74c3c; /* Red for accident status */
+        }
+        #locationStatus {
+            color: #2ecc71; /* Green for location status */
+        }
+        button {
+            padding: 12px 24px;
+            font-size: 1rem;
+            background: #3498db; /* Blue button */
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+        button:hover {
+            background: #2980b9; /* Darker blue on hover */
+        }
+        button:active {
+            background: #1c5980; /* Even darker blue on click */
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Safety Shield</h1>
+        <p>Smart Safety for a Safer Tomorrow</p>
+        <button id="startBtn">Start Listening</button>
+        <p id="status">Status: Not Listening</p>
+        <p id="accidentStatus">Accident Status: No Accident Detected</p>
+        <p id="locationStatus">Location Status: Waiting for access...</p>
+    </div>
+
+    <script>
+        const startBtn = document.getElementById('startBtn');
+        const statusText = document.getElementById('status');
+        const accidentStatus = document.getElementById('accidentStatus');
+        const locationStatus = document.getElementById('locationStatus');
+        let recognition;
+
+        // Function to request microphone permission
+        async function requestMicrophonePermission() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                console.log('Microphone access granted');
+                return true;
+            } catch (error) {
+                console.error('Microphone access denied:', error);
+                statusText.textContent = 'Status: Microphone access denied. Please allow access to use this feature.';
+                return false;
+            }
+        }
+
+        // Function to request motion sensor permission (Safari-specific)
+        async function requestMotionSensorPermission() {
+            if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                try {
+                    const permissionState = await DeviceMotionEvent.requestPermission();
+                    if (permissionState === 'granted') {
+                        console.log('Motion sensor access granted');
+                        setupMotionSensor();
+                    } else {
+                        console.error('Motion sensor access denied');
+                        accidentStatus.textContent = 'Accident Status: Motion sensor access denied. Please allow access to use this feature.';
+                    }
+                } catch (error) {
+                    console.error('Error requesting motion sensor permission:', error);
+                }
+            } else {
+                // Devices that don't require explicit permission
+                setupMotionSensor();
+            }
+        }
+
+        // Function to request location permission
+        function requestLocationPermission() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        console.log('Location access granted');
+                        const { latitude, longitude } = position.coords;
+                        locationStatus.textContent = `Location Status: Access granted. Finding nearest police station...`;
+                        findNearestPoliceStation(latitude, longitude);
+                    },
+                    (error) => {
+                        console.error('Location access denied:', error);
+                        locationStatus.textContent = 'Location Status: Access denied. Please allow access to use this feature.';
+                    }
+                );
+            } else {
+                locationStatus.textContent = 'Location Status: Geolocation is not supported by this browser.';
+            }
+        }
+
+        // Function to find the nearest police station using Google Places API
+        async function findNearestPoliceStation(latitude, longitude) {
+            const apiKey = 'YOUR_GOOGLE_PLACES_API_KEY'; // Replace with your Google Places API key
+            const radius = 5000; // Search within 5km
+            const type = 'police';
+            const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${latitude},${longitude}&radius=${radius}&type=${type}&key=${apiKey}`;
+
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                if (data.results && data.results.length > 0) {
+                    const nearestStation = data.results[0];
+                    const stationName = nearestStation.name;
+                    const stationAddress = nearestStation.vicinity;
+                    locationStatus.textContent = `Nearest Police Station: ${stationName}, ${stationAddress}`;
+                } else {
+                    locationStatus.textContent = 'No police stations found nearby.';
+                }
+            } catch (error) {
+                console.error('Error finding police station:', error);
+                locationStatus.textContent = 'Error finding police station. Please try again.';
+            }
+        }
+
+        // Start listening for speech
+        startBtn.addEventListener('click', async () => {
+            const microphoneGranted = await requestMicrophonePermission();
+            if (microphoneGranted) {
+                startListening();
+            }
+        });
+
+        // Speech recognition setup
+        function startListening() {
+            statusText.textContent = 'Status: Listening...'; // Update status to "Listening"
+            recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+            recognition.lang = 'en-US';
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 1;
+
+            recognition.start();
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript.toLowerCase();
+                if (transcript.includes('help')) {
+                    statusText.textContent = 'Status: Help Detected! Calling for assistance...';
+                    callNumber('7872286993'); // Indian phone number
+                }
+            };
+
+            recognition.onerror = (event) => {
+                statusText.textContent = 'Status: Error occurred. Please try again.';
+                console.error('Speech recognition error:', event.error);
+            };
+
+            recognition.onend = () => {
+                statusText.textContent = 'Status: Listening ended.'; // Update status when listening ends
+            };
+        }
+
+        // Function to call a number
+        function callNumber(number) {
+            window.location.href = `tel:${number}`;
+        }
+
+        // Device motion (accelerometer) setup
+        function setupMotionSensor() {
+            if (window.DeviceMotionEvent) {
+                window.addEventListener('devicemotion', (event) => {
+                    const acceleration = event.accelerationIncludingGravity;
+                    const gValue = Math.sqrt(
+                        acceleration.x ** 2 + acceleration.y ** 2 + acceleration.z ** 2
+                    ) / 9.81; // Convert to g-force
+
+                    if (gValue > 2) { // Check if g-value exceeds 2g
+                        accidentStatus.textContent = 'Accident Status: Accident Detected!';
+                        callNumber('7872286993'); // Call for help
+                    } else {
+                        accidentStatus.textContent = 'Accident Status: No Accident Detected';
+                    }
+                });
+            } else {
+                accidentStatus.textContent = 'Accident Status: Device Motion Not Supported';
+            }
+        }
+
+        // Automatically request permissions on page load
+        window.addEventListener('load', async () => {
+            // Request motion sensor permission
+            if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                alert('Please allow motion sensor access to enable accident detection.');
+                await requestMotionSensorPermission();
+            } else {
+                setupMotionSensor();
+            }
+
+            // Request location permission
+            alert('Please allow location access to find the nearest police station.');
+            requestLocationPermission();
+        });
+    </script>
+</body>
+</html>
